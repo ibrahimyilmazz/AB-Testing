@@ -7,16 +7,9 @@ from scipy.stats import shapiro
 import scipy.stats as stats
 from statsmodels.stats.proportion import proportions_ztest
 
-
-"""
-**Verinin Okutulması**
-"""
-
-Control_Group = pd.read_excel(r"C:\Users\alisa\OneDrive\Desktop\dsmlbc7\ab_testing.xlsx",
-                              sheet_name='Control Group')  # maximum bidding
-Test_Group = pd.read_excel(r"C:\Users\alisa\OneDrive\Desktop\dsmlbc7\ab_testing.xlsx", sheet_name='Test Group')
-
-
+# Data
+Control_Group = pd.read_excel("ab_testing.xlsx", sheet_name='Control Group')  
+Test_Group = pd.read_excel("ab_testing.xlsx", sheet_name='Test Group')
 
 def check_df(dataframe, head=5):
     print("##################### Shape #####################")
@@ -35,7 +28,8 @@ def check_df(dataframe, head=5):
 check_df(Control_Group)
 check_df(Test_Group)
 
-# Aykırı değerler için eşik değeri belirleme
+
+# Aykırı degerler icin esik degerin belirlenmesi
 def outlier_thresholds(dataframe, variable, low_quantile=0.05, up_quantile=0.95):
     quantile_one = dataframe[variable].quantile(low_quantile)
     quantile_three = dataframe[variable].quantile(up_quantile)
@@ -45,7 +39,7 @@ def outlier_thresholds(dataframe, variable, low_quantile=0.05, up_quantile=0.95)
     return low_limit, up_limit
 
 
-# Değişkende herhangi bir aykırı değer olup olmadığını kontrol ediyor.
+# Aykırı deger var mi?
 def has_outliers(dataframe, numeric_columns):
     for col in numeric_columns:
         low_limit, up_limit = outlier_thresholds(dataframe, col)
@@ -53,11 +47,11 @@ def has_outliers(dataframe, numeric_columns):
             number_of_outliers = dataframe[(dataframe[col] > up_limit) | (dataframe[col] < low_limit)].shape[0]
             print(col, " : ", number_of_outliers, "outliers")
 
-# Control Group un aykırılık incelemesi
+# Control Group 
 for var in Control_Group:
     print(var, "has ", has_outliers(Control_Group, [var]), "Outliers")
 
-# Test Group un aykırılık incelemesi
+# Test Group 
 for var in Control_Group:
     print(var, "has ", has_outliers(Test_Group, [var]), "Outliers")
 
@@ -71,9 +65,9 @@ AB = Control_Group.append(Test_Group)
 AB.tail()
 
 """
-AB teste için AB isminde yeni dataframe oluşturulmuştur. 
-- Control değişkeni -> Kontrol grubu Purchase değerleri
-- Test değişkeni ->Test grubu Purchase değerleri 
+AB testi icin AB isminde yeni dataframe olusturulmustur
+- Control değişkeni -> Kontrol grubu Purchase degerleri
+- Test değişkeni -> Test grubu Purchase degerleri 
 """
 
 AB.shape
@@ -93,21 +87,7 @@ Ortalama satın alma değeri test grubu(B) lehinedir.
 
 
 
-
-"""
-GÖREV 1- Bu A / B testinin hipotezini nasıl tanımlarsınız?
-
-HO: "Maximum Bidding" kampanyası sunulan Kontrol grubu(A) ile "Average Bidding" kampanyası sunulan Test grubunun(B) 
-satın alma sayılarının ortalaması arasında istatistiksel olarak anlamlı farklılık yoktur.(HO=H1)
-
-H1:** "Maximum Bidding" kampanyası sunulan Kontrol grubu ile "Average Bidding" kampanyası sunulan Test grubunun 
-satın alma sayılarının ortalaması arasında istatistiksel olarak anlamlı farklılık vardır.(HO≠H1)
-"""
-
-
-"""
-GÖREV 2-Çıkan test sonuçlarının istatistiksel olarak anlamlı olup olmadığını yorumlayınız
-"""
+## Cikan test sonuclarinin istatistiksel olarak anlamli olup olmadıginin yorumlanmasi
 
 def AB_Test(dataframe, group, target):
     # A ve B gruplarının ayrılması
@@ -144,7 +124,7 @@ def AB_Test(dataframe, group, target):
         # H0: M1 == M2 - False
         # H1: M1 != M2 - True
 
-    # Sonuç
+    # Sonuc
     temp = pd.DataFrame({"AB Hypothesis": [ttest < 0.05], "p-value": [ttest]})
     temp["Test Type"] = np.where((ntA == False) & (ntB == False), "Parametric", "Non-Parametric")
     temp["AB Hypothesis"] = np.where(temp["AB Hypothesis"] == False, "Fail to Reject H0", "Reject H0")
@@ -163,23 +143,6 @@ AB_Test(AB, group="Group", target="Purchase")
 
 """
 Kontrol grubu (A) ile Test grubu (B) arasında istatistiksel olarak anlamlı farklılık yoktur.
-"""
-
-"""
-GÖREV 3-Hangi testleri kullandınız? Sebeplerini belirtiniz
-
-Normallik testi ve varyans homojenliği testi sonucunda 2 varsayımın da sağlandığı görülmüştür.
-Bu sebeple "Bağımsız İki Örneklem T Testi" uygulanmıştır. 
-"""
-
-"""
-GÖREV 4-Soru 2'ye verdiğiniz cevaba göre, müşteriye tavsiyeniz nedir?
-
-→ Kontrol grubu ile test grubunun ürün satın alma ortalamaları arasında istatistiksel olarak anlamlı bir farklılık bulunmamaktadır !!!
-Yani aslında ilk bakışta gördüğümüz ve daha iyi olduğunu düşündüğümüz kontrol grubunun yorumuna şans eseri ulaşmışız!
-Bir süre geçtikten sonra yeniden test yapılmasını öneririz.
-ya da
-Diğer mentriklerin de testi yapıldıktan sonra karara varılmasını öneririz.
 """
 
 
