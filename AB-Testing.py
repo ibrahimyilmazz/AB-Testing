@@ -1,0 +1,213 @@
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from matplotlib import pyplot
+import numpy as np
+from scipy.stats import shapiro
+import scipy.stats as stats
+from statsmodels.stats.proportion import proportions_ztest
+
+
+"""
+**Verinin Okutulması**
+"""
+
+Control_Group = pd.read_excel(r"C:\Users\alisa\OneDrive\Desktop\dsmlbc7\ab_testing.xlsx",
+                              sheet_name='Control Group')  # maximum bidding
+Test_Group = pd.read_excel(r"C:\Users\alisa\OneDrive\Desktop\dsmlbc7\ab_testing.xlsx", sheet_name='Test Group')
+
+
+
+def check_df(dataframe, head=5):
+    print("##################### Shape #####################")
+    print(dataframe.shape)
+    print("##################### Types #####################")
+    print(dataframe.dtypes)
+    print("##################### Head #####################")
+    print(dataframe.head(head))
+    print("##################### Tail #####################")
+    print(dataframe.tail(head))
+    print("##################### NA #####################")
+    print(dataframe.isnull().sum())
+    print("##################### Quantiles #####################")
+    print(dataframe.quantile([0, 0.05, 0.50, 0.95, 0.99, 1]).T)
+
+check_df(Control_Group)
+check_df(Test_Group)
+
+# Aykırı değerler için eşik değeri belirleme
+def outlier_thresholds(dataframe, variable, low_quantile=0.05, up_quantile=0.95):
+    quantile_one = dataframe[variable].quantile(low_quantile)
+    quantile_three = dataframe[variable].quantile(up_quantile)
+    interquantile_range = quantile_three - quantile_one
+    up_limit = quantile_three + 1.5 * interquantile_range
+    low_limit = quantile_one - 1.5 * interquantile_range
+    return low_limit, up_limit
+
+
+# Değişkende herhangi bir aykırı değer olup olmadığını kontrol ediyor.
+def has_outliers(dataframe, numeric_columns):
+    for col in numeric_columns:
+        low_limit, up_limit = outlier_thresholds(dataframe, col)
+        if dataframe[(dataframe[col] > up_limit) | (dataframe[col] < low_limit)].any(axis=None):
+            number_of_outliers = dataframe[(dataframe[col] > up_limit) | (dataframe[col] < low_limit)].shape[0]
+            print(col, " : ", number_of_outliers, "outliers")
+
+# Control Group un aykırılık incelemesi
+for var in Control_Group:
+    print(var, "has ", has_outliers(Control_Group, [var]), "Outliers")
+
+# Test Group un aykırılık incelemesi
+for var in Control_Group:
+    print(var, "has ", has_outliers(Test_Group, [var]), "Outliers")
+
+
+# kontrol ve test grubunun birleştirilmesi
+Control_Group["Group"] = "A"  # Maximum Bidding
+Test_Group["Group"] = "B"  # Average Bidding
+
+
+AB = Control_Group.append(Test_Group)
+AB.tail()
+
+"""
+AB teste için AB isminde yeni dataframe oluşturulmuştur. 
+- Control değişkeni -> Kontrol grubu Purchase değerleri
+- Test değişkeni ->Test grubu Purchase değerleri 
+"""
+
+AB.shape
+
+# Kontrol ve Test gruplarının purchase ortalamaları  #median?
+print(" Mean of purchase of control group(A): %.3f" % AB[AB["Group"] == "A"]["Purchase"].mean(), "\n",
+      "Mean of purchase of test group(B): %.3f" % AB[AB["Group"] == "B"]["Purchase"].mean())
+
+print(" Median of purchase of control group(A): %.3f" % AB[AB["Group"] == "A"]["Purchase"].median(), "\n",
+      " Median of purchase of test group(B): %.3f" % AB[AB["Group"] == "B"]["Purchase"].median())
+
+
+"""
+İki yöntemin ortalama değerlerine bakıldığında aralarındaki farklılık olduğu görülmektedir.
+Ortalama satın alma değeri test grubu(B) lehinedir.
+"""
+
+
+
+
+"""
+GÖREV 1- Bu A / B testinin hipotezini nasıl tanımlarsınız?
+
+HO: "Maximum Bidding" kampanyası sunulan Kontrol grubu(A) ile "Average Bidding" kampanyası sunulan Test grubunun(B) 
+satın alma sayılarının ortalaması arasında istatistiksel olarak anlamlı farklılık yoktur.(HO=H1)
+
+H1:** "Maximum Bidding" kampanyası sunulan Kontrol grubu ile "Average Bidding" kampanyası sunulan Test grubunun 
+satın alma sayılarının ortalaması arasında istatistiksel olarak anlamlı farklılık vardır.(HO≠H1)
+"""
+
+
+"""
+GÖREV 2-Çıkan test sonuçlarının istatistiksel olarak anlamlı olup olmadığını yorumlayınız
+"""
+
+def AB_Test(dataframe, group, target):
+    # A ve B gruplarının ayrılması
+    groupA = dataframe[dataframe[group] == "A"][target]  #current
+    groupB = dataframe[dataframe[group] == "B"][target]  #new
+
+    # Varsayım: Normallik
+    # Shapiro-Wilks Test
+    # H0: Örnek dağılımı ile teorik normal dağılım arasında istatistiksel olarak anlamlı bir fark yoktur! -False
+    # H1: Örnek dağılımı ile teorik normal dağılım arasında istatistiksel olarak anlamlı bir fark vardır! -True
+    # p-value 0.05 den küçük ise H0 reddedilir.
+    ntA = shapiro(groupA)[1] < 0.05
+    ntB = shapiro(groupB)[1] < 0.05
+
+    if (ntA == False) & (ntB == False):  # "H0: Normal dağılım" sağlandıysa
+        # Parametric Test
+        # Varsayım: Varyans Homojenliği
+        leveneTest = stats.levene(groupA, groupB)[1] < 0.05
+        # H0: karşılaştırılan gruplar eşit varyansa sahiptir. - False
+        # H1: karşılaştırılan gruplar eşit varyansa sahip değildir. - Ture
+        if leveneTest == False:  # eşit varyansa sahiplerse
+            # Homogeneity
+            ttest = stats.ttest_ind(groupA, groupB, equal_var=True)[1]
+            # H0: M1 == M2 - False
+            # H1: M1 != M2 - True
+        else:  # eşit varyansa sahip değillerse  welch
+            # Heterogeneous
+            ttest = stats.ttest_ind(groupA, groupB, equal_var=False)[1]
+            # H0: M1 == M2 - False
+            # H1: M1 != M2 - True
+    else:  # Normal dağılıma sahip değilse
+        # Non-Parametric Test
+        ttest = stats.mannwhitneyu(groupA, groupB)[1]
+        # H0: M1 == M2 - False
+        # H1: M1 != M2 - True
+
+    # Sonuç
+    temp = pd.DataFrame({"AB Hypothesis": [ttest < 0.05], "p-value": [ttest]})
+    temp["Test Type"] = np.where((ntA == False) & (ntB == False), "Parametric", "Non-Parametric")
+    temp["AB Hypothesis"] = np.where(temp["AB Hypothesis"] == False, "Fail to Reject H0", "Reject H0")
+    temp["Comment"] = np.where(temp["AB Hypothesis"] == "Fail to Reject H0", "A/B groups are similar!",
+                               "A/B groups are not similar!")
+
+    if (ntA == False) & (ntB == False):
+        temp["Homogeneity"] = np.where(leveneTest == False, "Yes", "No")
+        temp = temp[["Test Type", "Homogeneity", "AB Hypothesis", "p-value", "Comment"]]
+    else:
+        temp = temp[["Test Type", "AB Hypothesis", "p-value", "Comment"]]
+
+    return temp
+
+AB_Test(AB, group="Group", target="Purchase")
+
+"""
+Kontrol grubu (A) ile Test grubu (B) arasında istatistiksel olarak anlamlı farklılık yoktur.
+"""
+
+"""
+GÖREV 3-Hangi testleri kullandınız? Sebeplerini belirtiniz
+
+Normallik testi ve varyans homojenliği testi sonucunda 2 varsayımın da sağlandığı görülmüştür.
+Bu sebeple "Bağımsız İki Örneklem T Testi" uygulanmıştır. 
+"""
+
+"""
+GÖREV 4-Soru 2'ye verdiğiniz cevaba göre, müşteriye tavsiyeniz nedir?
+
+→ Kontrol grubu ile test grubunun ürün satın alma ortalamaları arasında istatistiksel olarak anlamlı bir farklılık bulunmamaktadır !!!
+Yani aslında ilk bakışta gördüğümüz ve daha iyi olduğunu düşündüğümüz kontrol grubunun yorumuna şans eseri ulaşmışız!
+Bir süre geçtikten sonra yeniden test yapılmasını öneririz.
+ya da
+Diğer mentriklerin de testi yapıldıktan sonra karara varılmasını öneririz.
+"""
+
+
+#######################################
+"""Website Click Through Rate (CTR)
+
+-->Reklamı GÖREN kullanıcıların, reklamı ne sıklıkta TIKLADIKLARINI gösteren orandır.
+-->Reklam Tıklanma Sayısı/ Reklam Gösterilme Sayısı
+-->Örnek 5 tıklama, 100 gösterimde CTR= %5"""
+
+
+AB.head()
+
+control_CTR = AB.loc[AB["Group"] == "A", "Click"].sum() / AB.loc[AB["Group"] == "A", "Impression"].sum()
+test_CTR = AB.loc[AB["Group"] == "B", "Click"].sum() / AB.loc[AB["Group"] == "B", "Impression"].sum()
+print("Control_CTR: ", control_CTR, "\n", "test_CTR: ", test_CTR)
+
+# İlk bakışta tıklama oranının kontrol grubu lehine olduğunu görüyoruz.
+# Yani reklamı görüp de tıklayanların oranı mevcut sistemde daha iyi gibi görünüyor.
+
+"""
+Varsayım: n≥ 30 sağlandı.
+Hipotezler
+H0: Deneyin kullanıcı davranışına istatistiksel olarak anlamlı etkisi yoktur. (p_cont = p_test)
+H1: Deneyin kullanıcı davranışına istatistiksel olarak anlamlı etkisi vardır. (p_cont ≠ p_test)
+"""
+
+
+click_count= AB.loc[AB["Group"] == "B", "Click"].sum() ,  AB.loc[AB["Group"] == "A", "Click"].sum()
+impression_count= AB.loc[AB["Group"] == "B", "Impression"].sum(), AB.loc[AB["Group"] == "A", "Impression"].sum()
+proportions_ztest(count=click_count, nobs=impression_count)
